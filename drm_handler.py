@@ -23,7 +23,7 @@ from utils import progress_bar, sanitize_text
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - FIXED VERSION WITH SAFE DELETE
+# DRM HANDLER - FIXED VERSION WITH EARLY TOPIC CREATION
 # ======================================================================================
 
 # Safe senders with fallback to user's DM if channel is invalid
@@ -31,67 +31,83 @@ async def safe_send_message(bot, chat_id, text, fallback_chat_id=None, thread_id
     if thread_id:
         kwargs['message_thread_id'] = thread_id
     try:
-        await bot.send_message(chat_id, text, **kwargs)
+        return await bot.send_message(chat_id, text, **kwargs)
     except PeerIdInvalid:
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Invalid channel ID: `{chat_id}`. Files will be sent here instead.\n\n{text}", **kwargs)
+            return None
         else:
             raise
     except TypeError:
         kwargs.pop('message_thread_id', None)
-        await bot.send_message(chat_id, text, **kwargs)
+        return await bot.send_message(chat_id, text, **kwargs)
     except Exception as e:
         print(f"Error sending message: {e}")
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Error sending to channel: {e}\n\n{text}", **kwargs)
+        return None
 
 async def safe_send_document(bot, chat_id, document, fallback_chat_id=None, thread_id=None, **kwargs):
     if thread_id:
         kwargs['message_thread_id'] = thread_id
     try:
-        await bot.send_document(chat_id, document, **kwargs)
+        return await bot.send_document(chat_id, document, **kwargs)
     except PeerIdInvalid:
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Invalid channel ID: `{chat_id}`. Document sent here instead.")
-            await bot.send_document(fallback_chat_id, document, **kwargs)
+            return await bot.send_document(fallback_chat_id, document, **kwargs)
         else:
             raise
     except TypeError:
         kwargs.pop('message_thread_id', None)
-        await bot.send_document(chat_id, document, **kwargs)
+        return await bot.send_document(chat_id, document, **kwargs)
+    except Exception as e:
+        print(f"Error sending document: {e}")
+        if fallback_chat_id:
+            await bot.send_document(fallback_chat_id, document, **kwargs)
+        return None
 
 async def safe_send_video(bot, chat_id, video, fallback_chat_id=None, thread_id=None, **kwargs):
     if thread_id:
         kwargs['message_thread_id'] = thread_id
     try:
-        await bot.send_video(chat_id, video, **kwargs)
+        return await bot.send_video(chat_id, video, **kwargs)
     except PeerIdInvalid:
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Invalid channel ID: `{chat_id}`. Video sent here instead.")
-            await bot.send_video(fallback_chat_id, video, **kwargs)
+            return await bot.send_video(fallback_chat_id, video, **kwargs)
         else:
             raise
     except TypeError:
         kwargs.pop('message_thread_id', None)
-        await bot.send_video(chat_id, video, **kwargs)
+        return await bot.send_video(chat_id, video, **kwargs)
+    except Exception as e:
+        print(f"Error sending video: {e}")
+        if fallback_chat_id:
+            await bot.send_video(fallback_chat_id, video, **kwargs)
+        return None
 
 async def safe_send_photo(bot, chat_id, photo, fallback_chat_id=None, thread_id=None, **kwargs):
     if thread_id:
         kwargs['message_thread_id'] = thread_id
     try:
-        await bot.send_photo(chat_id, photo, **kwargs)
+        return await bot.send_photo(chat_id, photo, **kwargs)
     except PeerIdInvalid:
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Invalid channel ID: `{chat_id}`. Photo sent here instead.")
-            await bot.send_photo(fallback_chat_id, photo, **kwargs)
+            return await bot.send_photo(fallback_chat_id, photo, **kwargs)
         else:
             raise
     except TypeError:
         kwargs.pop('message_thread_id', None)
-        await bot.send_photo(chat_id, photo, **kwargs)
+        return await bot.send_photo(chat_id, photo, **kwargs)
+    except Exception as e:
+        print(f"Error sending photo: {e}")
+        if fallback_chat_id:
+            await bot.send_photo(fallback_chat_id, photo, **kwargs)
+        return None
 
 async def safe_delete(message):
-    """Safely delete a message if it exists and is not None"""
     if message:
         try:
             await message.delete()
@@ -302,7 +318,7 @@ async def drm_handler(bot: Client, m: Message):
     else:
         thumb = thumb
 
-    # ==================== TOPIC-WISE LOGIC START ====================
+    # ==================== TOPIC-WISE LOGIC - NOW OUTSIDE raw_text CONDITION ====================
     topic_threads = {}
     current_topic_for_index = {}
 
@@ -310,6 +326,7 @@ async def drm_handler(bot: Client, m: Message):
         try:
             chat = await bot.get_chat(channel_id)
             if chat.type == "supergroup" and chat.is_forum:
+                # Group links by topic
                 topic_groups = {}
                 for i, (prefix, url) in enumerate(links):
                     raw_title = links[i][0]
@@ -321,6 +338,7 @@ async def drm_handler(bot: Client, m: Message):
                     topic_groups.setdefault(topic_name, []).append(i)
                     current_topic_for_index[i] = topic_name
 
+                # Create forum topics for each unique topic
                 for topic_name, indices in topic_groups.items():
                     try:
                         created = await bot.create_forum_topic(channel_id, topic_name)
@@ -334,21 +352,21 @@ async def drm_handler(bot: Client, m: Message):
         except Exception as e:
             await m.reply_text(sanitize_text(f"⚠️ Could not check group type: {e}. Topic-wise disabled."))
             topicwise = False
+    # ==================== TOPIC-WISE LOGIC END ====================
 
+    # Pin batch message only if starting from first link (raw_text == 1)
     try:
         if m.document and raw_text == "1" and channel_id != m.chat.id:
             batch_message = await safe_send_message(bot, channel_id, sanitize_text(f"<blockquote><b>🎯Target Batch : {b_name}</b></blockquote>"), fallback_chat_id=fallback_chat_id)
-            if "/d" not in raw_text7:
+            if batch_message and "/d" not in raw_text7:
                 await safe_send_message(bot, m.chat.id, sanitize_text(f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩"), fallback_chat_id=fallback_chat_id)
                 try:
                     await bot.pin_chat_message(channel_id, batch_message.id)
-                    message_id = batch_message.id
-                    pinning_message_id = message_id + 1
-                    await bot.delete_messages(channel_id, pinning_message_id)
+                    await bot.delete_messages(channel_id, batch_message.id + 1)
                 except Exception as e:
-                    await m.reply_text(f"⚠️ Could not pin message: {e}")
+                    await m.reply_text(f"⚠️ Could not pin: {e}")
         else:
-             if "/d" not in raw_text7:
+            if "/d" not in raw_text7:
                 await safe_send_message(bot, m.chat.id, sanitize_text(f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩"), fallback_chat_id=fallback_chat_id)
     except Exception as e:
         await m.reply_text(sanitize_text(f"**Fail Reason »**\n<blockquote><i>{e}</i></blockquote>\n\n✦𝐁𝐨𝐭 𝐌𝐚𝐝𝐞 𝐁𝐲 ✦ {CR}🌟`"))
