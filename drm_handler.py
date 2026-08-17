@@ -19,12 +19,50 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, 
 
 import saini as helper
 import globals
-from utils import progress_bar
+from utils import progress_bar, sanitize_text
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - COMPLETE WITH TOPIC-WISE SUPPORT + ERROR FIX
+# DRM HANDLER - FIXED VERSION
 # ======================================================================================
+
+# Safe sender for compatibility with older pyrogram if message_thread_id fails
+async def safe_send_message(bot, chat_id, text, thread_id=None, **kwargs):
+    if thread_id:
+        kwargs['message_thread_id'] = thread_id
+    try:
+        await bot.send_message(chat_id, text, **kwargs)
+    except TypeError:
+        # If message_thread_id is not supported, remove it and retry
+        kwargs.pop('message_thread_id', None)
+        await bot.send_message(chat_id, text, **kwargs)
+
+async def safe_send_document(bot, chat_id, document, thread_id=None, **kwargs):
+    if thread_id:
+        kwargs['message_thread_id'] = thread_id
+    try:
+        await bot.send_document(chat_id, document, **kwargs)
+    except TypeError:
+        kwargs.pop('message_thread_id', None)
+        await bot.send_document(chat_id, document, **kwargs)
+
+async def safe_send_video(bot, chat_id, video, thread_id=None, **kwargs):
+    if thread_id:
+        kwargs['message_thread_id'] = thread_id
+    try:
+        await bot.send_video(chat_id, video, **kwargs)
+    except TypeError:
+        kwargs.pop('message_thread_id', None)
+        await bot.send_video(chat_id, video, **kwargs)
+
+async def safe_send_photo(bot, chat_id, photo, thread_id=None, **kwargs):
+    if thread_id:
+        kwargs['message_thread_id'] = thread_id
+    try:
+        await bot.send_photo(chat_id, photo, **kwargs)
+    except TypeError:
+        kwargs.pop('message_thread_id', None)
+        await bot.send_photo(chat_id, photo, **kwargs)
 
 async def drm_handler(bot: Client, m: Message):
     globals.processing_request = True
@@ -62,7 +100,7 @@ async def drm_handler(bot: Client, m: Message):
     if m.document:
         if m.chat.id not in AUTH_USERS:
             print(f"User ID not in AUTH_USERS", m.chat.id)
-            await bot.send_message(m.chat.id, f"<blockquote>__**Oopss! You are not a Premium member\nPLEASE /upgrade YOUR PLAN\nSend me your user id for authorization\nYour User id**__ - `{m.chat.id}`</blockquote>\n")
+            await safe_send_message(bot, m.chat.id, f"<blockquote>__**Oopss! You are not a Premium member\nPLEASE /upgrade YOUR PLAN\nSend me your user id for authorization\nYour User id**__ - `{m.chat.id}`</blockquote>\n")
             return
 
     pdf_count = 0
@@ -104,7 +142,7 @@ async def drm_handler(bot: Client, m: Message):
         return
 
     if m.document:
-        editable = await m.reply_text(f"**Total 🔗 links found are {len(links)}\n<blockquote>•PDF : {pdf_count}      •V2 : {v2_count}\n•Img : {img_count}      •YT : {yt_count}\n•zip : {zip_count}       •m3u8 : {m3u8_count}\n•drm : {drm_count}      •Other : {other_count}\n•mpd : {mpd_count}</blockquote>\nSend From where you want to download**")
+        editable = await m.reply_text(sanitize_text(f"**Total 🔗 links found are {len(links)}\n<blockquote>•PDF : {pdf_count}      •V2 : {v2_count}\n•Img : {img_count}      •YT : {yt_count}\n•zip : {zip_count}       •m3u8 : {m3u8_count}\n•drm : {drm_count}      •Other : {other_count}\n•mpd : {mpd_count}</blockquote>\nSend From where you want to download**"))
         try:
             input0: Message = await bot.listen(editable.chat.id, timeout=20)
             raw_text = input0.text
@@ -114,7 +152,7 @@ async def drm_handler(bot: Client, m: Message):
     
         if int(raw_text) > len(links):
             try:
-                await editable.edit(f"🔹**Enter number in range of Index (01-{len(links)})**")
+                await editable.edit(sanitize_text(f"🔹**Enter number in range of Index (01-{len(links)})**"))
             except MessageNotModified:
                 pass
             processing_request = False
@@ -122,7 +160,7 @@ async def drm_handler(bot: Client, m: Message):
             return
 
         try:
-            await editable.edit(f"**Enter Batch Name or send /d**")
+            await editable.edit(sanitize_text(f"**Enter Batch Name or send /d**"))
         except MessageNotModified:
             pass
         try:
@@ -138,7 +176,7 @@ async def drm_handler(bot: Client, m: Message):
             b_name = raw_text0
 
         try:
-            await editable.edit("__**⚠️Provide the Channel ID or send /d__\n\n<blockquote><i>🔹 Make me an admin to upload.\n🔸Send /id in your channel to get the Channel ID.\n\nExample: Channel ID = -100XXXXXXXXXXX</i></blockquote>\n**")
+            await editable.edit(sanitize_text("__**⚠️Provide the Channel ID or send /d__\n\n<blockquote><i>🔹 Make me an admin to upload.\n🔸Send /id in your channel to get the Channel ID.\n\nExample: Channel ID = -100XXXXXXXXXXX</i></blockquote>\n**"))
         except MessageNotModified:
             pass
         try:
@@ -162,7 +200,7 @@ async def drm_handler(bot: Client, m: Message):
             b_name = '**Link Input**'
             await m.delete()
         else:
-            editable = await m.reply_text(f"╭━━━━❰ᴇɴᴛᴇʀ ʀᴇꜱᴏʟᴜᴛɪᴏɴ❱━━➣ \n┣━━⪼ send `144`  for 144p\n┣━━⪼ send `240`  for 240p\n┣━━⪼ send `360`  for 360p\n┣━━⪼ send `480`  for 480p\n┣━━⪼ send `720`  for 720p\n┣━━⪼ send `1080` for 1080p\n╰━━⌈⚡[🦋`{CR}`🦋]⚡⌋━━➣ ")
+            editable = await m.reply_text(sanitize_text(f"╭━━━━❰ᴇɴᴛᴇʀ ʀᴇꜱᴏʟᴜᴛɪᴏɴ❱━━➣ \n┣━━⪼ send `144`  for 144p\n┣━━⪼ send `240`  for 240p\n┣━━⪼ send `360`  for 360p\n┣━━⪼ send `480`  for 480p\n┣━━⪼ send `720`  for 720p\n┣━━⪼ send `1080` for 1080p\n╰━━⌈⚡[🦋`{CR}`🦋]⚡⌋━━➣ "))
             input2: Message = await bot.listen(editable.chat.id, filters=filters.text & filters.user(m.from_user.id))
             raw_text2 = input2.text
             quality = f"{raw_text2}p"
@@ -199,18 +237,16 @@ async def drm_handler(bot: Client, m: Message):
         thumb = thumb
 
     # ==================== TOPIC-WISE LOGIC START ====================
-    topic_threads = {}          # topic_name -> message_thread_id
-    current_topic_for_index = {} # index -> topic_name
+    topic_threads = {}
+    current_topic_for_index = {}
 
     if topicwise:
-        # Check if channel is a supergroup with forum enabled
         try:
             chat = await bot.get_chat(channel_id)
             if chat.type == "supergroup" and chat.is_forum:
-                # Group links by topic
                 topic_groups = {}
                 for i, (prefix, url) in enumerate(links):
-                    raw_title = links[i][0]  # name part
+                    raw_title = links[i][0]
                     t_match = re.search(r"[\(\[]([^\)\]]+)[\)\]]", raw_title)
                     if t_match:
                         topic_name = t_match.group(1).strip()
@@ -219,36 +255,34 @@ async def drm_handler(bot: Client, m: Message):
                     topic_groups.setdefault(topic_name, []).append(i)
                     current_topic_for_index[i] = topic_name
 
-                # Create forum topics for each unique topic
                 for topic_name, indices in topic_groups.items():
                     try:
                         created = await bot.create_forum_topic(channel_id, topic_name)
                         topic_threads[topic_name] = created.message_thread_id
                     except Exception as e:
-                        await m.reply_text(f"⚠️ Could not create topic '{topic_name}': {e}")
+                        await m.reply_text(sanitize_text(f"⚠️ Could not create topic '{topic_name}': {e}"))
                         topic_threads[topic_name] = None
             else:
                 topicwise = False
                 await m.reply_text("ℹ️ Topic-wise upload is only supported in supergroups with forum topics enabled. Disabling topic-wise for this run.")
         except Exception as e:
-            await m.reply_text(f"⚠️ Could not check group type: {e}. Topic-wise disabled.")
+            await m.reply_text(sanitize_text(f"⚠️ Could not check group type: {e}. Topic-wise disabled."))
             topicwise = False
-    # ==================== TOPIC-WISE LOGIC END ====================
 
     try:
         if m.document and raw_text == "1":
-            batch_message = await bot.send_message(chat_id=channel_id, text=f"<blockquote><b>🎯Target Batch : {b_name}</b></blockquote>")
+            batch_message = await safe_send_message(bot, channel_id, sanitize_text(f"<blockquote><b>🎯Target Batch : {b_name}</b></blockquote>"))
             if "/d" not in raw_text7:
-                await bot.send_message(chat_id=m.chat.id, text=f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩")
+                await safe_send_message(bot, m.chat.id, sanitize_text(f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩"))
                 await bot.pin_chat_message(channel_id, batch_message.id)
                 message_id = batch_message.id
                 pinning_message_id = message_id + 1
                 await bot.delete_messages(channel_id, pinning_message_id)
         else:
              if "/d" not in raw_text7:
-                await bot.send_message(chat_id=m.chat.id, text=f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩")
+                await safe_send_message(bot, m.chat.id, sanitize_text(f"<blockquote><b><i>🎯Target Batch : {b_name}</i></b></blockquote>\n\n🔄 Your Task is under processing, please check your Set Channel📱. Once your task is complete, I will inform you 📩"))
     except Exception as e:
-        await m.reply_text(f"**Fail Reason »**\n<blockquote><i>{e}</i></blockquote>\n\n✦𝐁𝐨𝐭 𝐌𝐚𝐝𝐞 𝐁𝐲 ✦ {CR}🌟`")
+        await m.reply_text(sanitize_text(f"**Fail Reason »**\n<blockquote><i>{e}</i></blockquote>\n\n✦𝐁𝐨𝐭 𝐌𝐚𝐝𝐞 𝐁𝐲 ✦ {CR}🌟`"))
 
     failed_count = 0
     count = int(raw_text)    
@@ -341,7 +375,7 @@ async def drm_handler(bot: Client, m: Message):
                         url = None
                         keys_string = None
                 except Exception as e:
-                    await bot.send_message(channel_id, f'⚠️**Downloading Failed**⚠️\n**Name** =>> `{str(count).zfill(3)} {name1}`\n**Url** =>> {url}\n\n<blockquote expandable><i><b>Failed Reason to sign url: {str(e)}</b></i></blockquote>', disable_web_page_preview=True, message_thread_id=thread_id if thread_id else None)
+                    await safe_send_message(bot, channel_id, sanitize_text(f'⚠️**Downloading Failed**⚠️\n**Name** =>> `{str(count).zfill(3)} {name1}`\n**Url** =>> {url}\n\n<blockquote expandable><i><b>Failed Reason to sign url: {str(e)}</b></i></blockquote>'), thread_id=thread_id, disable_web_page_preview=True)
                     count += 1
                     failed_count += 1
                     continue
@@ -388,65 +422,65 @@ async def drm_handler(bot: Client, m: Message):
             else:
                 cmd = f'yt-dlp -f "{ytf}" "{url}" -o "{name}.mp4"'
 
-            # ---------- Prepare Captions ----------
+            # ---------- Prepare Captions (sanitized) ----------
             if m.text:
-                cc = f'[{name1} [{res}p].mkv]({link0})'
-                cc1 = f'[{name1}.pdf]({link0})'
-                cczip = f'[{name1}.zip]({link0})'
-                ccimg = f'[{name1}.jpg]({link0})'
-                ccm = f'[{name1}.mp3]({link0})'
-                cchtml = f'[{name1}.html]({link0})'
+                cc = sanitize_text(f'[{name1} [{res}p].mkv]({link0})')
+                cc1 = sanitize_text(f'[{name1}.pdf]({link0})')
+                cczip = sanitize_text(f'[{name1}.zip]({link0})')
+                ccimg = sanitize_text(f'[{name1}.jpg]({link0})')
+                ccm = sanitize_text(f'[{name1}.mp3]({link0})')
+                cchtml = sanitize_text(f'[{name1}.html]({link0})')
             else:
                 if topic == "/yes":
                     if caption == "/cc1":
-                        cc = f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{v_name} [{res}p].mkv`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cc1 = f'[📕]Pdf Id : {str(count).zfill(3)}\n**File Title :** `{v_name}.pdf`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cczip = f'[📁]Zip Id : {str(count).zfill(3)}\n**Zip Title :** `{v_name}.zip`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        ccimg = f'[🖼️]Img Id : {str(count).zfill(3)}\n**Img Title :** `{v_name}.jpg`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cchtml = f'[🌐]Html Id : {str(count).zfill(3)}\n**Html Title :** `{v_name}.html`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        ccyt = f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{v_name}.mp4`\n<a href="{url}">__**Click Here to Watch Stream**__</a>\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        ccm = f'[🎵]Mp3 Id : {str(count).zfill(3)}\n**Audio Title :** `{v_name}.mp3`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
+                        cc = sanitize_text(f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{v_name} [{res}p].mkv`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cc1 = sanitize_text(f'[📕]Pdf Id : {str(count).zfill(3)}\n**File Title :** `{v_name}.pdf`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cczip = sanitize_text(f'[📁]Zip Id : {str(count).zfill(3)}\n**Zip Title :** `{v_name}.zip`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        ccimg = sanitize_text(f'[🖼️]Img Id : {str(count).zfill(3)}\n**Img Title :** `{v_name}.jpg`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cchtml = sanitize_text(f'[🌐]Html Id : {str(count).zfill(3)}\n**Html Title :** `{v_name}.html`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        ccyt = sanitize_text(f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{v_name}.mp4`\n<a href="{url}">__**Click Here to Watch Stream**__</a>\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        ccm = sanitize_text(f'[🎵]Mp3 Id : {str(count).zfill(3)}\n**Audio Title :** `{v_name}.mp3`\n<blockquote><b>Batch Name : {b_name}\nTopic Name : {t_name}</b></blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
                     elif caption == "/cc2":
-                        cc = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🎞️ Title :</b> {v_name}\n<b>├── Extention :  {CR} .mkv</b>\n<b>├── Resolution : [{res}]</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟  𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cc1 = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>📁 Title :</b> {v_name}\n<b>├── Extention :  {CR} .pdf</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cczip = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>📒 Title :</b> {v_name}\n<b>├── Extention :  {CR} .zip</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        ccimg = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🖼️ Title :</b> {v_name}\n<b>├── Extention :  {CR} .jpg</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        ccm = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🎵 Title :</b> {v_name}\n<b>├── Extention :  {CR} .mp3</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cchtml = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🌐 Title :</b> {v_name}\n<b>├── Extention :  {CR} .html</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
+                        cc = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🎞️ Title :</b> {v_name}\n<b>├── Extention :  {CR} .mkv</b>\n<b>├── Resolution : [{res}]</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟  𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cc1 = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>📁 Title :</b> {v_name}\n<b>├── Extention :  {CR} .pdf</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cczip = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>📒 Title :</b> {v_name}\n<b>├── Extention :  {CR} .zip</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        ccimg = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🖼️ Title :</b> {v_name}\n<b>├── Extention :  {CR} .jpg</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        ccm = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🎵 Title :</b> {v_name}\n<b>├── Extention :  {CR} .mp3</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cchtml = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<blockquote><b>⋅ ─  {t_name}  ─ ⋅</b></blockquote>\n\n<b>🌐 Title :</b> {v_name}\n<b>├── Extention :  {CR} .html</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
                     else:
-                        cc = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} [{res}p] .mkv'
-                        cc1 = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .pdf'
-                        cczip = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .zip'
-                        ccimg = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .jpg'
-                        ccm = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .mp3'
-                        cchtml = f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .html'
+                        cc = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} [{res}p] .mkv')
+                        cc1 = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .pdf')
+                        cczip = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .zip')
+                        ccimg = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .jpg')
+                        ccm = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .mp3')
+                        cchtml = sanitize_text(f'<blockquote><b>⋅ ─ {t_name} ─ ⋅</b></blockquote>\n<b>{str(count).zfill(3)}.</b> {v_name} .html')
                 else:
                     if caption == "/cc1":
-                        cc = f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{name1} [{res}p].mkv`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cc1 = f'[📕]Pdf Id : {str(count).zfill(3)}\n**File Title :** `{name1}.pdf`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cczip = f'[📁]Zip Id : {str(count).zfill(3)}\n**Zip Title :** `{name1}.zip`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n' 
-                        ccimg = f'[🖼️]Img Id : {str(count).zfill(3)}\n**Img Title :** `{name1}.jpg`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        ccm = f'[🎵]Audio Id : {str(count).zfill(3)}\n**Audio Title :** `{name1}.mp3`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
-                        cchtml = f'[🌐]Html Id : {str(count).zfill(3)}\n**Html Title :** `{name1}.html`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n'
+                        cc = sanitize_text(f'[🎥]Vid Id : {str(count).zfill(3)}\n**Video Title :** `{name1} [{res}p].mkv`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cc1 = sanitize_text(f'[📕]Pdf Id : {str(count).zfill(3)}\n**File Title :** `{name1}.pdf`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cczip = sanitize_text(f'[📁]Zip Id : {str(count).zfill(3)}\n**Zip Title :** `{name1}.zip`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        ccimg = sanitize_text(f'[🖼️]Img Id : {str(count).zfill(3)}\n**Img Title :** `{name1}.jpg`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        ccm = sanitize_text(f'[🎵]Audio Id : {str(count).zfill(3)}\n**Audio Title :** `{name1}.mp3`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n**𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
+                        cchtml = sanitize_text(f'[🌐]Html Id : {str(count).zfill(3)}\n**Html Title :** `{name1}.html`\n<blockquote><b>Batch Name :</b> {b_name}</blockquote>\n\n** 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} \n')
                     elif caption == "/cc2":
-                        cc = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🎞️ Title :</b> {name1}\n<b>├── Extention :  {CR} .mkv</b>\n<b>├── Resolution : [{res}]</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cc1 = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>📁 Title :</b> {name1}\n<b>├── Extention :  {CR} .pdf</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cczip = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>📒 Title :</b> {name1}\n<b>├── Extention :  {CR} .zip</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        ccimg = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🖼️ Title :</b> {name1}\n<b>├── Extention :  {CR} .jpg</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        ccm = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🎵 Title :</b> {name1}\n<b>├── Extention :  {CR} .mp3</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
-                        cchtml = f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🌐 Title :</b> {name1}\n<b>├── Extention :  {CR} .html</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **"
+                        cc = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🎞️ Title :</b> {name1}\n<b>├── Extention :  {CR} .mkv</b>\n<b>├── Resolution : [{res}]</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cc1 = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>📁 Title :</b> {name1}\n<b>├── Extention :  {CR} .pdf</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cczip = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>📒 Title :</b> {name1}\n<b>├── Extention :  {CR} .zip</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        ccimg = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🖼️ Title :</b> {name1}\n<b>├── Extention :  {CR} .jpg</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        ccm = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🎵 Title :</b> {name1}\n<b>├── Extention :  {CR} .mp3</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
+                        cchtml = sanitize_text(f"——— ✦ {str(count).zfill(3)} ✦ ———\n\n<b>🌐 Title :</b> {name1}\n<b>├── Extention :  {CR} .html</b>\n<blockquote><b>📚 Course : {b_name}</b></blockquote>\n\n**🌟 𝐸𝓍𝓉𝓇𝒶𝒸𝓉𝑒𝒹 𝒷𝓎 ➤ {CR} **")
                     else:
-                        cc = f'<b>{str(count).zfill(3)}.</b> {name1} [{res}p] .mkv'
-                        cc1 = f'<b>{str(count).zfill(3)}.</b> {name1} .pdf'
-                        cczip = f'<b>{str(count).zfill(3)}.</b> {name1} .zip'
-                        ccimg = f'<b>{str(count).zfill(3)}.</b> {name1} .jpg'
-                        ccm = f'<b>{str(count).zfill(3)}.</b> {name1} .mp3'
-                        cchtml = f'<b>{str(count).zfill(3)}.</b> {name1} .html'
+                        cc = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} [{res}p] .mkv')
+                        cc1 = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} .pdf')
+                        cczip = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} .zip')
+                        ccimg = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} .jpg')
+                        ccm = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} .mp3')
+                        cchtml = sanitize_text(f'<b>{str(count).zfill(3)}.</b> {name1} .html')
 
             remaining_links = len(links) - count
             progress = (count / len(links)) * 100
-            Show = f"<i><b>Video Downloading</b></i>\n<blockquote><b>{str(count).zfill(3)}) {name1}</b></blockquote>" 
-            Show1 = f"<blockquote>🚀𝐏𝐫𝐨𝐠𝐫𝐞𝐬𝐬 » {progress:.2f}%</blockquote>\n┃\n" \
+            Show = sanitize_text(f"<i><b>Video Downloading</b></i>\n<blockquote><b>{str(count).zfill(3)}) {name1}</b></blockquote>")
+            Show1 = sanitize_text(f"<blockquote>🚀𝐏𝐫𝐨𝐠𝐫𝐞𝐬𝐬 » {progress:.2f}%</blockquote>\n┃\n" \
                     f"┣🔗𝐈𝐧𝐝𝐞𝐱 » {count}/{len(links)}\n┃\n" \
                     f"╰━🖇️𝐑𝐞𝐦𝐚𝐢𝐧 » {remaining_links}\n" \
                     f"━━━━━━━━━━━━━━━━━━━━━━━━\n" \
@@ -460,13 +494,13 @@ async def drm_handler(bot: Client, m: Message):
                     f'╰━━🖇️𝐔𝐫𝐥 » <a href="{url}">**Api Link**</a>\n' \
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━\n" \
                     f"🛑**Send** /stop **to stop process**\n┃\n" \
-                    f"╰━✦𝐁𝐨𝐭 𝐌𝐚𝐝𝐞 𝐁𝐲 ✦ {CR}"
+                    f"╰━✦𝐁𝐨𝐭 𝐌𝐚𝐝𝐞 𝐁𝐲 ✦ {CR}")
 
-            # ---------- Download & Send with thread_id ----------
+            # ---------- Download & Send with safe functions ----------
             if "drive" in url:
                 try:
                     ka = await helper.download(url, name)
-                    copy = await bot.send_document(chat_id=channel_id, document=ka, caption=cc1, message_thread_id=thread_id if thread_id else None)
+                    await safe_send_document(bot, channel_id, ka, thread_id=thread_id, caption=cc1)
                     count+=1
                     os.remove(ka)
                 except FloodWait as e:
@@ -492,7 +526,7 @@ async def drm_handler(bot: Client, m: Message):
                                 with open(f'{namef}.pdf', 'wb') as file:
                                     file.write(response.content)
                                 await asyncio.sleep(retry_delay)
-                                copy = await bot.send_document(chat_id=channel_id, document=f'{namef}.pdf', caption=cc1, message_thread_id=thread_id if thread_id else None)
+                                await safe_send_document(bot, channel_id, f'{namef}.pdf', thread_id=thread_id, caption=cc1)
                                 count += 1
                                 os.remove(f'{namef}.pdf')
                                 success = True
@@ -514,7 +548,7 @@ async def drm_handler(bot: Client, m: Message):
                         cmd = f'yt-dlp -o "{namef}.pdf" "{url}"'
                         download_cmd = f"{cmd} -R 25 --fragment-retries 25"
                         os.system(download_cmd)
-                        copy = await bot.send_document(chat_id=channel_id, document=f'{namef}.pdf', caption=cc1, message_thread_id=thread_id if thread_id else None)
+                        await safe_send_document(bot, channel_id, f'{namef}.pdf', thread_id=thread_id, caption=cc1)
                         count += 1
                         os.remove(f'{namef}.pdf')
                     except FloodWait as e:
@@ -528,7 +562,7 @@ async def drm_handler(bot: Client, m: Message):
                     cmd = f'yt-dlp -o "{namef}.{ext}" "{url}"'
                     download_cmd = f"{cmd} -R 25 --fragment-retries 25"
                     os.system(download_cmd)
-                    copy = await bot.send_photo(chat_id=channel_id, photo=f'{namef}.{ext}', caption=ccimg, message_thread_id=thread_id if thread_id else None)
+                    await safe_send_photo(bot, channel_id, f'{namef}.{ext}', thread_id=thread_id, caption=ccimg)
                     count += 1
                     os.remove(f'{namef}.{ext}')
                 except FloodWait as e:
@@ -542,7 +576,7 @@ async def drm_handler(bot: Client, m: Message):
                     cmd = f'yt-dlp -o "{namef}.{ext}" "{url}"'
                     download_cmd = f"{cmd} -R 25 --fragment-retries 25"
                     os.system(download_cmd)
-                    copy = await bot.send_document(chat_id=channel_id, document=f'{namef}.{ext}', caption=ccm, message_thread_id=thread_id if thread_id else None)
+                    await safe_send_document(bot, channel_id, f'{namef}.{ext}', thread_id=thread_id, caption=ccm)
                     count += 1
                     os.remove(f'{namef}.{ext}')
                 except FloodWait as e:
@@ -551,7 +585,7 @@ async def drm_handler(bot: Client, m: Message):
                     continue    
                     
             elif 'encrypted.m' in url:    
-                prog = await bot.send_message(channel_id, Show, disable_web_page_preview=True, message_thread_id=thread_id if thread_id else None)
+                prog = await safe_send_message(bot, channel_id, Show, thread_id=thread_id, disable_web_page_preview=True)
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.download_and_decrypt_video(url, cmd, name, appxkey)  
                 filename = res_file  
@@ -563,7 +597,7 @@ async def drm_handler(bot: Client, m: Message):
                 continue  
 
             elif 'drmcdni' in url or 'drm/wv' in url or 'drm/common' in url:
-                prog = await bot.send_message(channel_id, Show, disable_web_page_preview=True, message_thread_id=thread_id if thread_id else None)
+                prog = await safe_send_message(bot, channel_id, Show, thread_id=thread_id, disable_web_page_preview=True)
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.decrypt_and_merge_video(mpd, keys_string, path, name, raw_text2)
                 filename = res_file
@@ -575,7 +609,7 @@ async def drm_handler(bot: Client, m: Message):
                 continue
      
             else:
-                prog = await bot.send_message(channel_id, Show, disable_web_page_preview=True, message_thread_id=thread_id if thread_id else None)
+                prog = await safe_send_message(bot, channel_id, Show, thread_id=thread_id, disable_web_page_preview=True)
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.download_video(url, cmd, name)
                 filename = res_file
@@ -592,10 +626,14 @@ async def drm_handler(bot: Client, m: Message):
     success_count = len(links) - int(raw_text) - failed_count + 1
     video_count = len(links) - pdf_count - img_count
     if m.document:
-        await bot.send_message(channel_id, f"<blockquote>🔗 Total URLs: {len(links)} \n┠🔴 Total Failed URLs: {failed_count}\n┠🟢 Total Successful URLs: {success_count}\n┃   ┠🎥 Total Video URLs: {video_count}\n┃   ┠📄 Total PDF URLs: {pdf_count}\n┃   ┠📸 Total IMAGE URLs: {img_count}</blockquote>\n", message_thread_id=None)
-        await bot.send_message(channel_id, f"⋅ ─ list index ({raw_text}-{len(links)}) out of range ─ ⋅\n<blockquote><b>📚Batch : {b_name}</b></blockquote>\n⋅ ─ DOWNLOADING ✩ COMPLETED ─ ⋅", message_thread_id=None)
+        final_text = sanitize_text(f"<blockquote>🔗 Total URLs: {len(links)} \n┠🔴 Total Failed URLs: {failed_count}\n┠🟢 Total Successful URLs: {success_count}\n┃   ┠🎥 Total Video URLs: {video_count}\n┃   ┠📄 Total PDF URLs: {pdf_count}\n┃   ┠📸 Total IMAGE URLs: {img_count}</blockquote>\n")
+        await safe_send_message(bot, channel_id, final_text)
+        
+        final_text2 = sanitize_text(f"⋅ ─ list index ({raw_text}-{len(links)}) out of range ─ ⋅\n<blockquote><b>📚Batch : {b_name}</b></blockquote>\n⋅ ─ DOWNLOADING ✩ COMPLETED ─ ⋅")
+        await safe_send_message(bot, channel_id, final_text2)
+        
         if "/d" not in raw_text7:
-            await bot.send_message(m.chat.id, f"<blockquote><b>✅ Your Task is completed, please check your Set Channel📱</b></blockquote>")
+            await safe_send_message(bot, m.chat.id, sanitize_text(f"<blockquote><b>✅ Your Task is completed, please check your Set Channel📱</b></blockquote>"))
 
 # ============================================================================================================
 def register_drm_handlers(bot):
