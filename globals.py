@@ -14,3 +14,4 @@ raw_text2 = '480'
 quality = '480p'
 res = '854x480'
 topic = '/d'
+topicwise = False   # <-- यह नया वेरिएबल है
