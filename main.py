@@ -1,7 +1,7 @@
 import os, re, sys, json, pytz, asyncio, requests, subprocess, random
 from pyromod import listen
 from pyrogram import Client, filters
-from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid, MessageNotModified
+from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid, MessageNotModified, ButtonUrlInvalid
 from pyrogram.types.messages_and_media import message
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, InputMediaPhoto
 
@@ -27,11 +27,15 @@ bot = Client(
     bot_token=BOT_TOKEN
 )
 
+# ---------- FIXED KEYBOARD (correct URL) ----------
 keyboard = InlineKeyboardMarkup([
     [InlineKeyboardButton("🎙️ Commands", callback_data="cmd_command")],
     [InlineKeyboardButton("💎 Features", callback_data="feat_command"), InlineKeyboardButton("⚙️ Settings", callback_data="setttings")],
     [InlineKeyboardButton("💳 Suscribation", callback_data="upgrade_command")],
-    [InlineKeyboardButton(text="📞 Contact", url=f"tg://openmessage?user_id={OWNER}"), InlineKeyboardButton(text="🛠️ Repo", url="@helpabyparth1")],
+    [
+        InlineKeyboardButton(text="📞 Contact", url=f"tg://user?id={OWNER}"),   # <-- FIXED
+        InlineKeyboardButton(text="🛠️ Repo", url="https://github.com/nikhilsaiiop/saini-txt-direct")
+    ],
 ])
 
 @bot.on_message(filters.command("start"))
@@ -47,7 +51,7 @@ async def start(bot, m: Message):
             f"➠ 𝐈 𝐚𝐦 𝐚 𝐓𝐞𝐱𝐭 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐞𝐫 𝐁𝐨𝐭\n\n"
             f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
             f"➠ For Guide Use button - **✨ Commands** 📖\n\n"
-            f"➠ 𝐌𝐚𝐝𝐞 𝐁𝐲 : [Krishna ❤️‍🔥](tg://openmessage?user_id={OWNER}) 🦁"
+            f"➠ 𝐌𝐚𝐝𝐞 𝐁𝐲 : [Krishna ❤️‍🔥](tg://user?id={OWNER}) 🦁"
         )
     else:
         caption = sanitize_text(
@@ -56,7 +60,7 @@ async def start(bot, m: Message):
             f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
             f"**You are currently using the free version.** 🆓\n"
             f"**Want to get started? Press /id**\n\n"
-            f"💬 𝐂𝐨𝐧𝐭𝐚𝐜𝐭 : [Krishna ❤️‍🔥](tg://openmessage?user_id={OWNER}) to Get The Subscription ! 🔓\n"
+            f"💬 𝐂𝐨𝐧𝐭𝐚𝐜𝐭 : [Krishna ❤️‍🔥](tg://user?id={OWNER}) to Get The Subscription ! 🔓\n"
         )
     await bot.send_photo(
         chat_id=m.chat.id,
@@ -74,7 +78,7 @@ async def back_to_main_menu(client, callback_query):
         f"➠ 𝐈 𝐚𝐦 𝐚 𝐓𝐞𝐱𝐭 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐞𝐫 𝐁𝐨𝐭\n\n"
         f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
         f"╭────────⊰◆⊱────────╮\n"
-        f"➠ 𝐌𝐚𝐝𝐞 𝐁𝐲 : [Krishna ❤️‍🔥](tg://openmessage?user_id={OWNER}) 💻\n"
+        f"➠ 𝐌𝐚𝐝𝐞 𝐁𝐲 : [Krishna ❤️‍🔥](tg://user?id={OWNER}) 💻\n"
         f"╰────────⊰◆⊱────────╯\n"
     )
     try:
@@ -87,11 +91,19 @@ async def back_to_main_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
+    except ButtonUrlInvalid:
+        # If URL still invalid, fallback to without button
+        await callback_query.message.edit_media(
+            InputMediaPhoto(
+                media="https://envs.sh/GVI.jpg",
+                caption=caption
+            )
+        )
     await callback_query.answer()
 
 @bot.on_message(filters.command(["id"]))
 async def id_command(client, message: Message):
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(text="Send to Owner", url=f"tg://openmessage?user_id={OWNER}")]])
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(text="Send to Owner", url=f"tg://user?id={OWNER}")]])  # FIXED
     chat_id = message.chat.id
     text = sanitize_text(f"<blockquote expandable><b>The ID of this chat id is:</b></blockquote>\n`{chat_id}`")
     if str(chat_id).startswith("-100"):
