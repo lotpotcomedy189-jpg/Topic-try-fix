@@ -12,7 +12,7 @@ from pytube import YouTube
 from aiohttp import web
 from pyromod import listen
 from pyrogram import Client, filters
-from pyrogram.errors import FloodWait, PeerIdInvalid, UserIsBlocked, InputUserDeactivated, PeerIdInvalid
+from pyrogram.errors import FloodWait, PeerIdInvalid, UserIsBlocked, InputUserDeactivated
 from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid, MessageNotModified, ButtonUrlInvalid
 from pyrogram.types.messages_and_media import message
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, InputMediaPhoto
@@ -23,7 +23,7 @@ from utils import progress_bar, sanitize_text
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - FIXED VERSION WITH PEER_ID_INVALID HANDLING
+# DRM HANDLER - FIXED VERSION WITH SAFE DELETE
 # ======================================================================================
 
 # Safe senders with fallback to user's DM if channel is invalid
@@ -33,17 +33,14 @@ async def safe_send_message(bot, chat_id, text, fallback_chat_id=None, thread_id
     try:
         await bot.send_message(chat_id, text, **kwargs)
     except PeerIdInvalid:
-        # If chat_id is invalid, send to user's DM (fallback)
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Invalid channel ID: `{chat_id}`. Files will be sent here instead.\n\n{text}", **kwargs)
         else:
             raise
     except TypeError:
-        # If message_thread_id not supported, remove and retry
         kwargs.pop('message_thread_id', None)
         await bot.send_message(chat_id, text, **kwargs)
     except Exception as e:
-        # Log other errors and try fallback if available
         print(f"Error sending message: {e}")
         if fallback_chat_id:
             await bot.send_message(fallback_chat_id, f"⚠️ Error sending to channel: {e}\n\n{text}", **kwargs)
@@ -93,6 +90,14 @@ async def safe_send_photo(bot, chat_id, photo, fallback_chat_id=None, thread_id=
         kwargs.pop('message_thread_id', None)
         await bot.send_photo(chat_id, photo, **kwargs)
 
+async def safe_delete(message):
+    """Safely delete a message if it exists and is not None"""
+    if message:
+        try:
+            await message.delete()
+        except Exception as e:
+            print(f"Error deleting message: {e}")
+
 # Main handler
 async def drm_handler(bot: Client, m: Message):
     globals.processing_request = True
@@ -112,7 +117,15 @@ async def drm_handler(bot: Client, m: Message):
     topicwise = globals.topicwise
 
     user_id = m.from_user.id
-    fallback_chat_id = m.chat.id  # always DM
+    fallback_chat_id = m.chat.id
+
+    # Initialize variables to None
+    editable = None
+    input0 = None
+    input1 = None
+    input7 = None
+    prog = None
+    prog1 = None
 
     if m.document and m.document.file_name.endswith('.txt'):
         x = await m.download()
@@ -176,11 +189,14 @@ async def drm_handler(bot: Client, m: Message):
     if m.document:
         editable = await m.reply_text(sanitize_text(f"**Total 🔗 links found are {len(links)}\n<blockquote>•PDF : {pdf_count}      •V2 : {v2_count}\n•Img : {img_count}      •YT : {yt_count}\n•zip : {zip_count}       •m3u8 : {m3u8_count}\n•drm : {drm_count}      •Other : {other_count}\n•mpd : {mpd_count}</blockquote>\nSend From where you want to download**"))
         try:
-            input0: Message = await bot.listen(editable.chat.id, timeout=20)
+            input0 = await bot.listen(editable.chat.id, timeout=20)
             raw_text = input0.text
-            await input0.delete(True)
+            await safe_delete(input0)
         except asyncio.TimeoutError:
             raw_text = '1'
+        except Exception as e:
+            await m.reply_text(f"Error: {e}")
+            return
     
         if int(raw_text) > len(links):
             try:
@@ -196,11 +212,14 @@ async def drm_handler(bot: Client, m: Message):
         except MessageNotModified:
             pass
         try:
-            input1: Message = await bot.listen(editable.chat.id, timeout=20)
+            input1 = await bot.listen(editable.chat.id, timeout=20)
             raw_text0 = input1.text
-            await input1.delete(True)
+            await safe_delete(input1)
         except asyncio.TimeoutError:
             raw_text0 = '/d'
+        except Exception as e:
+            await m.reply_text(f"Error: {e}")
+            return
       
         if raw_text0 == '/d':
             b_name = file_name.replace('_', ' ')
@@ -212,25 +231,26 @@ async def drm_handler(bot: Client, m: Message):
         except MessageNotModified:
             pass
         try:
-            input7: Message = await bot.listen(editable.chat.id, timeout=20)
+            input7 = await bot.listen(editable.chat.id, timeout=20)
             raw_text7 = input7.text
-            await input7.delete(True)
+            await safe_delete(input7)
         except asyncio.TimeoutError:
             raw_text7 = '/d'
+        except Exception as e:
+            await m.reply_text(f"Error: {e}")
+            return
 
         if "/d" in raw_text7:
-            channel_id = m.chat.id  # use DM if user chooses default
+            channel_id = m.chat.id
         else:
             channel_id = raw_text7
-            # Validate channel by attempting to get chat
             try:
                 chat = await bot.get_chat(channel_id)
-                # If successful, proceed
             except Exception as e:
                 await m.reply_text(f"⚠️ Invalid Channel ID: `{channel_id}`. Error: {e}\n\nFiles will be sent to your DM instead.")
-                channel_id = m.chat.id  # fallback to DM
-                raw_text7 = '/d'  # treat as default to avoid pinning attempts
-        await editable.delete()
+                channel_id = m.chat.id
+                raw_text7 = '/d'
+        await safe_delete(editable)
 
     elif m.text:
         if any(ext in links[i][1] for ext in [".pdf", ".jpeg", ".jpg", ".png"] for i in range(len(links))):
@@ -241,11 +261,17 @@ async def drm_handler(bot: Client, m: Message):
             await m.delete()
         else:
             editable = await m.reply_text(sanitize_text(f"╭━━━━❰ᴇɴᴛᴇʀ ʀᴇꜱᴏʟᴜᴛɪᴏɴ❱━━➣ \n┣━━⪼ send `144`  for 144p\n┣━━⪼ send `240`  for 240p\n┣━━⪼ send `360`  for 360p\n┣━━⪼ send `480`  for 480p\n┣━━⪼ send `720`  for 720p\n┣━━⪼ send `1080` for 1080p\n╰━━⌈⚡[🦋`{CR}`🦋]⚡⌋━━➣ "))
-            input2: Message = await bot.listen(editable.chat.id, filters=filters.text & filters.user(m.from_user.id))
-            raw_text2 = input2.text
+            try:
+                input2 = await bot.listen(editable.chat.id, filters=filters.text & filters.user(m.from_user.id))
+                raw_text2 = input2.text
+                await safe_delete(input2)
+            except asyncio.TimeoutError:
+                raw_text2 = '480'
+            except Exception as e:
+                await m.reply_text(f"Error: {e}")
+                return
             quality = f"{raw_text2}p"
             await m.delete()
-            await input2.delete(True)
             try:
                 if raw_text2 == "144":
                     res = "256x144"
@@ -268,7 +294,7 @@ async def drm_handler(bot: Client, m: Message):
             channel_id = m.chat.id
             b_name = '**Link Input**'
             path = os.path.join("downloads", "Free Batch")
-            await editable.delete()
+            await safe_delete(editable)
         
     if thumb.startswith("http://") or thumb.startswith("https://"):
         getstatusoutput(f"wget '{thumb}' -O 'thumb.jpg'")
@@ -280,7 +306,7 @@ async def drm_handler(bot: Client, m: Message):
     topic_threads = {}
     current_topic_for_index = {}
 
-    if topicwise and channel_id != m.chat.id:  # only if channel is valid and not DM
+    if topicwise and channel_id != m.chat.id:
         try:
             chat = await bot.get_chat(channel_id)
             if chat.type == "supergroup" and chat.is_forum:
@@ -584,7 +610,7 @@ async def drm_handler(bot: Client, m: Message):
                             await asyncio.sleep(retry_delay)
                             continue 
                     for msg in failure_msgs:
-                        await msg.delete()
+                        await safe_delete(msg)
                         
                 else:
                     try:
@@ -632,8 +658,8 @@ async def drm_handler(bot: Client, m: Message):
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.download_and_decrypt_video(url, cmd, name, appxkey)  
                 filename = res_file  
-                await prog1.delete(True)
-                await prog.delete(True)
+                await safe_delete(prog1)
+                await safe_delete(prog)
                 await helper.send_vid(bot, m, cc, filename, vidwatermark, thumb, name, prog, channel_id, thread_id=thread_id)
                 count += 1  
                 await asyncio.sleep(1)  
@@ -644,8 +670,8 @@ async def drm_handler(bot: Client, m: Message):
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.decrypt_and_merge_video(mpd, keys_string, path, name, raw_text2)
                 filename = res_file
-                await prog1.delete(True)
-                await prog.delete(True)
+                await safe_delete(prog1)
+                await safe_delete(prog)
                 await helper.send_vid(bot, m, cc, filename, vidwatermark, thumb, name, prog, channel_id, thread_id=thread_id)
                 count += 1
                 await asyncio.sleep(1)
@@ -656,8 +682,8 @@ async def drm_handler(bot: Client, m: Message):
                 prog1 = await m.reply_text(Show1, disable_web_page_preview=True)
                 res_file = await helper.download_video(url, cmd, name)
                 filename = res_file
-                await prog1.delete(True)
-                await prog.delete(True)
+                await safe_delete(prog1)
+                await safe_delete(prog)
                 await helper.send_vid(bot, m, cc, filename, vidwatermark, thumb, name, prog, channel_id, thread_id=thread_id)
                 count += 1
                 time.sleep(1)
