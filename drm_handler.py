@@ -13,7 +13,7 @@ from aiohttp import web
 from pyromod import listen
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait, PeerIdInvalid, UserIsBlocked, InputUserDeactivated
-from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid
+from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid, MessageNotModified
 from pyrogram.types.messages_and_media import message
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, InputMediaPhoto
 
@@ -23,7 +23,7 @@ from utils import progress_bar
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - COMPLETE WITH TOPIC-WISE SUPPORT
+# DRM HANDLER - COMPLETE WITH TOPIC-WISE SUPPORT + ERROR FIX
 # ======================================================================================
 
 async def drm_handler(bot: Client, m: Message):
@@ -41,7 +41,7 @@ async def drm_handler(bot: Client, m: Message):
     quality = globals.quality
     res = globals.res
     topic = globals.topic
-    topicwise = globals.topicwise   # <-- नया
+    topicwise = globals.topicwise
 
     user_id = m.from_user.id
     if m.document and m.document.file_name.endswith('.txt'):
@@ -112,13 +112,19 @@ async def drm_handler(bot: Client, m: Message):
         except asyncio.TimeoutError:
             raw_text = '1'
     
-        if int(raw_text) > len(links) :
-            await editable.edit(f"🔹**Enter number in range of Index (01-{len(links)})**")
+        if int(raw_text) > len(links):
+            try:
+                await editable.edit(f"🔹**Enter number in range of Index (01-{len(links)})**")
+            except MessageNotModified:
+                pass
             processing_request = False
             await m.reply_text("🔹**Processing Cancled......  **")
             return
 
-        await editable.edit(f"**Enter Batch Name or send /d**")
+        try:
+            await editable.edit(f"**Enter Batch Name or send /d**")
+        except MessageNotModified:
+            pass
         try:
             input1: Message = await bot.listen(editable.chat.id, timeout=20)
             raw_text0 = input1.text
@@ -131,7 +137,10 @@ async def drm_handler(bot: Client, m: Message):
         else:
             b_name = raw_text0
 
-        await editable.edit("__**⚠️Provide the Channel ID or send /d__\n\n<blockquote><i>🔹 Make me an admin to upload.\n🔸Send /id in your channel to get the Channel ID.\n\nExample: Channel ID = -100XXXXXXXXXXX</i></blockquote>\n**")
+        try:
+            await editable.edit("__**⚠️Provide the Channel ID or send /d__\n\n<blockquote><i>🔹 Make me an admin to upload.\n🔸Send /id in your channel to get the Channel ID.\n\nExample: Channel ID = -100XXXXXXXXXXX</i></blockquote>\n**")
+        except MessageNotModified:
+            pass
         try:
             input7: Message = await bot.listen(editable.chat.id, timeout=20)
             raw_text7 = input7.text
@@ -216,11 +225,9 @@ async def drm_handler(bot: Client, m: Message):
                         created = await bot.create_forum_topic(channel_id, topic_name)
                         topic_threads[topic_name] = created.message_thread_id
                     except Exception as e:
-                        # If cannot create (maybe no permission), fallback to main chat
                         await m.reply_text(f"⚠️ Could not create topic '{topic_name}': {e}")
                         topic_threads[topic_name] = None
             else:
-                # Not a forum supergroup – disable topicwise
                 topicwise = False
                 await m.reply_text("ℹ️ Topic-wise upload is only supported in supergroups with forum topics enabled. Disabling topic-wise for this run.")
         except Exception as e:
@@ -258,7 +265,6 @@ async def drm_handler(bot: Client, m: Message):
             url = "https://" + Vxy
             link0 = "https://" + Vxy
 
-            # get topic name if topicwise enabled
             current_topic = current_topic_for_index.get(i, "General") if topicwise else None
             thread_id = topic_threads.get(current_topic, None) if topicwise else None
 
