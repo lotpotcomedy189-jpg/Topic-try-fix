@@ -18,6 +18,7 @@ from broadcast import register_broadcast_handlers
 from youtube_handler import register_youtube_handlers
 from authorisation import register_authorisation_handlers
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
+from utils import sanitize_text
 
 bot = Client(
     "bot",
@@ -41,7 +42,7 @@ async def start(bot, m: Message):
     user = await bot.get_me()
     mention = user.mention
     if m.chat.id in AUTH_USERS:
-        caption = (
+        caption = sanitize_text(
             f"𝐇𝐞𝐥𝐥𝐨 𝐃𝐞𝐚𝐫 👋!\n\n"
             f"➠ 𝐈 𝐚𝐦 𝐚 𝐓𝐞𝐱𝐭 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐞𝐫 𝐁𝐨𝐭\n\n"
             f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
@@ -49,7 +50,7 @@ async def start(bot, m: Message):
             f"➠ 𝐌𝐚𝐝𝐞 𝐁𝐲 : [Krishna ❤️‍🔥](tg://openmessage?user_id={OWNER}) 🦁"
         )
     else:
-        caption = (
+        caption = sanitize_text(
             f"𝐇𝐞𝐥𝐥𝐨 **{m.from_user.first_name}** 👋!\n\n"
             f"➠ 𝐈 𝐚𝐦 𝐚 𝐓𝐞𝐱𝐭 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐞𝐫 𝐁𝐨𝐭\n\n"
             f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
@@ -68,7 +69,7 @@ async def start(bot, m: Message):
 async def back_to_main_menu(client, callback_query):
     user_id = callback_query.from_user.id
     first_name = callback_query.from_user.first_name
-    caption = (
+    caption = sanitize_text(
         f"𝐇𝐞𝐥𝐥𝐨 **{first_name}** 👋!\n\n"
         f"➠ 𝐈 𝐚𝐦 𝐚 𝐓𝐞𝐱𝐭 𝐃𝐨𝐰𝐧𝐥𝐨𝐚𝐝𝐞𝐫 𝐁𝐨𝐭\n\n"
         f"➠ Can Extract Videos & PDFs From Your Text File and Upload to Telegram!\n\n"
@@ -92,7 +93,7 @@ async def back_to_main_menu(client, callback_query):
 async def id_command(client, message: Message):
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(text="Send to Owner", url=f"tg://openmessage?user_id={OWNER}")]])
     chat_id = message.chat.id
-    text = f"<blockquote expandable><b>The ID of this chat id is:</b></blockquote>\n`{chat_id}`"
+    text = sanitize_text(f"<blockquote expandable><b>The ID of this chat id is:</b></blockquote>\n`{chat_id}`")
     if str(chat_id).startswith("-100"):
         await message.reply_text(text)
     else:
@@ -100,7 +101,7 @@ async def id_command(client, message: Message):
 
 @bot.on_message(filters.private & filters.command(["info"]))
 async def info(bot: Client, update: Message):
-    text = (
+    text = sanitize_text(
         f"╭────────────────╮\n"
         f"│✨ **Your Telegram Info**✨ \n"
         f"├────────────────\n"
@@ -136,10 +137,10 @@ async def cancel_handler(client: Client, m: Message):
         print(f"User ID not in AUTH_USERS", m.chat.id)
         await bot.send_message(
             m.chat.id,
-            f"<blockquote>__**Oopss! You are not a Premium member**__\n"
+            sanitize_text(f"<blockquote>__**Oopss! You are not a Premium member**__\n"
             f"__**Please Upgrade Your Plan**__\n"
             f"__**Send me your user id for authorization**__\n"
-            f"__**Your User id** __- `{m.chat.id}`</blockquote>\n\n"
+            f"__**Your User id** __- `{m.chat.id}`</blockquote>\n\n")
         )
     else:
         if globals.processing_request:
