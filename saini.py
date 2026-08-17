@@ -261,18 +261,22 @@ async def download_and_decrypt_video(url, cmd, name, key):
             print(f"Failed to decrypt {video_path}.")  
             return None  
 
-# ========== UPDATED send_vid with safe delete + thread_id ==========
+# ---------- UPDATED send_vid with fallback for thread_id ----------
 async def send_vid(bot: Client, m: Message, cc, filename, vidwatermark, thumb, name, prog, channel_id, thread_id=None):
     subprocess.run(f'ffmpeg -i "{filename}" -ss 00:00:10 -vframes 1 "{filename}.jpg"', shell=True)
     
-    # Safe delete for prog message
     if prog:
         try:
             await prog.delete(True)
         except Exception as e:
             print(f"Error deleting prog: {e}")
     
-    reply1 = await bot.send_message(channel_id, f"**📩 Uploading Video 📩:-**\n<blockquote>**{CREDIT}**</blockquote>", message_thread_id=thread_id if thread_id else None)
+    # Send initial message with fallback
+    try:
+        reply1 = await bot.send_message(channel_id, f"**📩 Uploading Video 📩:-**\n<blockquote>**{CREDIT}**</blockquote>", message_thread_id=thread_id if thread_id else None)
+    except TypeError:
+        reply1 = await bot.send_message(channel_id, f"**📩 Uploading Video 📩:-**\n<blockquote>**{CREDIT}**</blockquote>")
+    
     reply = await m.reply_text(f"**Generate Thumbnail:**\n<blockquote>**{name}**</blockquote>")
     try:
         if thumb == "/d":
@@ -296,10 +300,17 @@ async def send_vid(bot: Client, m: Message, cc, filename, vidwatermark, thumb, n
     dur = int(duration(w_filename))
     start_time = time.time()
 
+    # Send video with fallback
     try:
         await bot.send_video(channel_id, w_filename, caption=cc, supports_streaming=True, height=720, width=1280, thumb=thumbnail, duration=dur, progress=progress_bar, progress_args=(reply, start_time), message_thread_id=thread_id if thread_id else None)
-    except Exception:
-        await bot.send_document(channel_id, w_filename, caption=cc, progress=progress_bar, progress_args=(reply, start_time), message_thread_id=thread_id if thread_id else None)
+    except TypeError:
+        await bot.send_video(channel_id, w_filename, caption=cc, supports_streaming=True, height=720, width=1280, thumb=thumbnail, duration=dur, progress=progress_bar, progress_args=(reply, start_time))
+    except Exception as e:
+        # If video send fails, try sending as document
+        try:
+            await bot.send_document(channel_id, w_filename, caption=cc, progress=progress_bar, progress_args=(reply, start_time), message_thread_id=thread_id if thread_id else None)
+        except TypeError:
+            await bot.send_document(channel_id, w_filename, caption=cc, progress=progress_bar, progress_args=(reply, start_time))
     
     # Cleanup
     try:
