@@ -232,7 +232,8 @@ async def send_doc(bot: Client, m: Message, cc, ka, cc1, prog, count, name, chan
     start_time = time.time()
     await bot.send_document(ka, caption=cc1)
     count+=1
-    await reply.delete (True)
+    if reply:
+        await reply.delete(True)
     time.sleep(1)
     os.remove(ka)
     time.sleep(3) 
@@ -260,10 +261,17 @@ async def download_and_decrypt_video(url, cmd, name, key):
             print(f"Failed to decrypt {video_path}.")  
             return None  
 
-# ========== UPDATED send_vid with thread_id ==========
+# ========== UPDATED send_vid with safe delete + thread_id ==========
 async def send_vid(bot: Client, m: Message, cc, filename, vidwatermark, thumb, name, prog, channel_id, thread_id=None):
     subprocess.run(f'ffmpeg -i "{filename}" -ss 00:00:10 -vframes 1 "{filename}.jpg"', shell=True)
-    await prog.delete (True)
+    
+    # Safe delete for prog message
+    if prog:
+        try:
+            await prog.delete(True)
+        except Exception as e:
+            print(f"Error deleting prog: {e}")
+    
     reply1 = await bot.send_message(channel_id, f"**📩 Uploading Video 📩:-**\n<blockquote>**{CREDIT}**</blockquote>", message_thread_id=thread_id if thread_id else None)
     reply = await m.reply_text(f"**Generate Thumbnail:**\n<blockquote>**{name}**</blockquote>")
     try:
@@ -292,7 +300,26 @@ async def send_vid(bot: Client, m: Message, cc, filename, vidwatermark, thumb, n
         await bot.send_video(channel_id, w_filename, caption=cc, supports_streaming=True, height=720, width=1280, thumb=thumbnail, duration=dur, progress=progress_bar, progress_args=(reply, start_time), message_thread_id=thread_id if thread_id else None)
     except Exception:
         await bot.send_document(channel_id, w_filename, caption=cc, progress=progress_bar, progress_args=(reply, start_time), message_thread_id=thread_id if thread_id else None)
-    os.remove(w_filename)
-    await reply.delete(True)
-    await reply1.delete(True)
-    os.remove(f"{filename}.jpg")
+    
+    # Cleanup
+    try:
+        os.remove(w_filename)
+    except Exception as e:
+        print(f"Error removing {w_filename}: {e}")
+    
+    if reply:
+        try:
+            await reply.delete(True)
+        except Exception as e:
+            print(f"Error deleting reply: {e}")
+    
+    if reply1:
+        try:
+            await reply1.delete(True)
+        except Exception as e:
+            print(f"Error deleting reply1: {e}")
+    
+    try:
+        os.remove(f"{filename}.jpg")
+    except Exception as e:
+        print(f"Error removing {filename}.jpg: {e}")
