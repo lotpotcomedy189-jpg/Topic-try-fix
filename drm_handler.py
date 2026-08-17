@@ -23,7 +23,7 @@ from utils import progress_bar, sanitize_text
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - FIXED VERSION WITH EARLY TOPIC CREATION
+# DRM HANDLER - DIRECT TOPIC CREATION (NO PRE-CHECK)
 # ======================================================================================
 
 # Safe senders with fallback to user's DM if channel is invalid
@@ -260,6 +260,7 @@ async def drm_handler(bot: Client, m: Message):
             channel_id = m.chat.id
         else:
             channel_id = raw_text7
+            # Validate channel ID (just to catch obvious errors)
             try:
                 chat = await bot.get_chat(channel_id)
             except Exception as e:
@@ -318,40 +319,48 @@ async def drm_handler(bot: Client, m: Message):
     else:
         thumb = thumb
 
-    # ==================== TOPIC-WISE LOGIC - NOW OUTSIDE raw_text CONDITION ====================
+    # ==================== TOPIC-WISE LOGIC - DIRECT CREATE (NO PRE-CHECK) ====================
     topic_threads = {}
     current_topic_for_index = {}
 
     if topicwise and channel_id != m.chat.id:
-        try:
-            chat = await bot.get_chat(channel_id)
-            if chat.type == "supergroup" and chat.is_forum:
-                # Group links by topic
-                topic_groups = {}
-                for i, (prefix, url) in enumerate(links):
-                    raw_title = links[i][0]
-                    t_match = re.search(r"[\(\[]([^\)\]]+)[\)\]]", raw_title)
-                    if t_match:
-                        topic_name = t_match.group(1).strip()
-                    else:
-                        topic_name = "General"
-                    topic_groups.setdefault(topic_name, []).append(i)
-                    current_topic_for_index[i] = topic_name
-
-                # Create forum topics for each unique topic
-                for topic_name, indices in topic_groups.items():
-                    try:
-                        created = await bot.create_forum_topic(channel_id, topic_name)
-                        topic_threads[topic_name] = created.message_thread_id
-                    except Exception as e:
-                        await m.reply_text(sanitize_text(f"⚠️ Could not create topic '{topic_name}': {e}"))
-                        topic_threads[topic_name] = None
+        await m.reply_text("🔍 Topic-wise mode is ON. Attempting to create topics directly...")
+        
+        # Group links by topic (यह हमेशा run होगा)
+        topic_groups = {}
+        for i, (prefix, url) in enumerate(links):
+            raw_title = links[i][0]
+            t_match = re.search(r"[\(\[]([^\)\]]+)[\)\]]", raw_title)
+            if t_match:
+                topic_name = t_match.group(1).strip()
             else:
-                topicwise = False
-                await m.reply_text("ℹ️ Topic-wise upload is only supported in supergroups with forum topics enabled. Disabling topic-wise for this run.")
-        except Exception as e:
-            await m.reply_text(sanitize_text(f"⚠️ Could not check group type: {e}. Topic-wise disabled."))
-            topicwise = False
+                topic_name = "General"
+            topic_groups.setdefault(topic_name, []).append(i)
+            current_topic_for_index[i] = topic_name
+
+        # Ab seedha create_forum_topic call karo, bina kisi condition ke
+        created_count = 0
+        for topic_name, indices in topic_groups.items():
+            try:
+                created = await bot.create_forum_topic(channel_id, topic_name)
+                topic_threads[topic_name] = created.message_thread_id
+                created_count += 1
+                await m.reply_text(f"✅ Topic created: `{topic_name}` (Thread ID: {created.message_thread_id})")
+            except Exception as e:
+                error_text = str(e)
+                # Agar error aaya, toh exactly batayega ki kya problem hai
+                await m.reply_text(sanitize_text(f"⚠️ Failed to create topic `{topic_name}`: {error_text}"))
+                topic_threads[topic_name] = None
+
+        if created_count > 0:
+            await m.reply_text(f"✅ Successfully created {created_count} topics!")
+        else:
+            await m.reply_text("❌ Failed to create ANY topics. Please check:\n"
+                               "1. Is this a Supergroup? (Basic groups don't support topics)\n"
+                               "2. Are Topics enabled in group settings?\n"
+                               "3. Is the bot an admin with 'Create Topics' permission?\n"
+                               "4. Did you provide the correct Group ID (not Channel ID)?")
+            topicwise = False  # अगर कुछ नहीं बना तो topicwise off कर दो
     # ==================== TOPIC-WISE LOGIC END ====================
 
     # Pin batch message only if starting from first link (raw_text == 1)
