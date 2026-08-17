@@ -16,6 +16,8 @@ from pyrogram.errors import FloodWait, PeerIdInvalid, UserIsBlocked, InputUserDe
 from pyrogram.errors.exceptions.bad_request_400 import StickerEmojiInvalid, MessageNotModified, ButtonUrlInvalid
 from pyrogram.types.messages_and_media import message
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, InputMediaPhoto
+from pyrogram.raw.functions.messages import CreateForumTopic
+from pyrogram.raw.types import InputPeerChannel
 
 import saini as helper
 import globals
@@ -23,7 +25,7 @@ from utils import progress_bar, sanitize_text
 from vars import API_ID, API_HASH, BOT_TOKEN, OWNER, CREDIT, AUTH_USERS, TOTAL_USERS, cookies_file_path
 
 # ======================================================================================
-# DRM HANDLER - DIRECT TOPIC CREATION (NO PRE-CHECK)
+# DRM HANDLER - RAW API FOR TOPIC CREATION
 # ======================================================================================
 
 # Safe senders with fallback to user's DM if channel is invalid
@@ -260,7 +262,7 @@ async def drm_handler(bot: Client, m: Message):
             channel_id = m.chat.id
         else:
             channel_id = raw_text7
-            # Validate channel ID (just to catch obvious errors)
+            # Validate channel ID
             try:
                 chat = await bot.get_chat(channel_id)
             except Exception as e:
@@ -319,14 +321,14 @@ async def drm_handler(bot: Client, m: Message):
     else:
         thumb = thumb
 
-    # ==================== TOPIC-WISE LOGIC - DIRECT CREATE (NO PRE-CHECK) ====================
+    # ==================== TOPIC-WISE LOGIC - RAW API ====================
     topic_threads = {}
     current_topic_for_index = {}
 
     if topicwise and channel_id != m.chat.id:
-        await m.reply_text("🔍 Topic-wise mode is ON. Attempting to create topics directly...")
+        await m.reply_text("🔍 Topic-wise mode is ON. Creating topics using raw API...")
         
-        # Group links by topic (यह हमेशा run होगा)
+        # Group links by topic
         topic_groups = {}
         for i, (prefix, url) in enumerate(links):
             raw_title = links[i][0]
@@ -338,29 +340,45 @@ async def drm_handler(bot: Client, m: Message):
             topic_groups.setdefault(topic_name, []).append(i)
             current_topic_for_index[i] = topic_name
 
-        # Ab seedha create_forum_topic call karo, bina kisi condition ke
-        created_count = 0
-        for topic_name, indices in topic_groups.items():
-            try:
-                created = await bot.create_forum_topic(channel_id, topic_name)
-                topic_threads[topic_name] = created.message_thread_id
-                created_count += 1
-                await m.reply_text(f"✅ Topic created: `{topic_name}` (Thread ID: {created.message_thread_id})")
-            except Exception as e:
-                error_text = str(e)
-                # Agar error aaya, toh exactly batayega ki kya problem hai
-                await m.reply_text(sanitize_text(f"⚠️ Failed to create topic `{topic_name}`: {error_text}"))
-                topic_threads[topic_name] = None
+        # Get input peer for the channel
+        try:
+            chat = await bot.get_chat(channel_id)
+            if chat.type != "supergroup":
+                await m.reply_text("❌ Only supergroups with forum topics are supported.")
+                topicwise = False
+            else:
+                # Get input peer
+                peer = await bot.resolve_peer(channel_id)
+                if not isinstance(peer, InputPeerChannel):
+                    await m.reply_text("❌ Invalid peer type. Ensure it's a supergroup.")
+                    topicwise = False
+                else:
+                    created_count = 0
+                    for topic_name, indices in topic_groups.items():
+                        try:
+                            # Create forum topic using raw API
+                            result = await bot.invoke(
+                                CreateForumTopic(
+                                    channel=peer,
+                                    title=topic_name,
+                                    icon_color=0  # default color
+                                )
+                            )
+                            topic_threads[topic_name] = result.id  # result.id is the thread_id
+                            created_count += 1
+                            await m.reply_text(f"✅ Topic created: `{topic_name}` (Thread ID: {result.id})")
+                        except Exception as e:
+                            await m.reply_text(sanitize_text(f"⚠️ Failed to create topic `{topic_name}`: {e}"))
+                            topic_threads[topic_name] = None
 
-        if created_count > 0:
-            await m.reply_text(f"✅ Successfully created {created_count} topics!")
-        else:
-            await m.reply_text("❌ Failed to create ANY topics. Please check:\n"
-                               "1. Is this a Supergroup? (Basic groups don't support topics)\n"
-                               "2. Are Topics enabled in group settings?\n"
-                               "3. Is the bot an admin with 'Create Topics' permission?\n"
-                               "4. Did you provide the correct Group ID (not Channel ID)?")
-            topicwise = False  # अगर कुछ नहीं बना तो topicwise off कर दो
+                    if created_count > 0:
+                        await m.reply_text(f"✅ Successfully created {created_count} topics!")
+                    else:
+                        await m.reply_text("❌ Failed to create ANY topics. Check bot permissions and group settings.")
+                        topicwise = False
+        except Exception as e:
+            await m.reply_text(sanitize_text(f"⚠️ Error while getting chat: {e}"))
+            topicwise = False
     # ==================== TOPIC-WISE LOGIC END ====================
 
     # Pin batch message only if starting from first link (raw_text == 1)
